@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DLH Group Explorer</title>
+<style>
+:root{--bg:#f6f6f3;--panel:#fff;--ink:#1c1c1a;--muted:#6b6b66;--line:#e2e1dc;--accent:#2f5d8a;--accent-ink:#fff;--chip:#eef2f6;--d:#2f5d8a;--n:#c9a227;--warn:#a4441c;--hover:#f1f0ec}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--panel:#1c1c1a;--ink:#ecebe6;--muted:#9a9993;--line:#2e2e2b;--accent:#7fb0e0;--accent-ink:#0d1a26;--chip:#232a31;--d:#7fb0e0;--n:#d9b84a;--warn:#e08a5f;--hover:#242422}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--panel)}
+h1{font-size:15px;margin:0;font-weight:650;letter-spacing:.2px}
+.file{color:var(--muted);font-size:12px}
+button,select,input{font:inherit;color:inherit}
+.btn{border:1px solid var(--line);background:var(--panel);padding:6px 11px;border-radius:6px;cursor:pointer}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.spacer{flex:1}
+main{padding:16px 20px}
+#drop{border:2px dashed var(--line);border-radius:12px;padding:60px 20px;text-align:center;color:var(--muted);background:var(--panel)}
+#drop.over{border-color:var(--accent);color:var(--ink)}
+#drop b{color:var(--ink)}
+#app{display:none}
+.kpis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:110px}
+.kpi .v{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.kpi .l{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.kpi.warn .v{color:var(--warn)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px}
+.f{display:flex;flex-direction:column;gap:2px}
+.f label{font-size:11px;color:var(--muted)}
+.f select,.f input{border:1px solid var(--line);background:var(--bg);border-radius:5px;padding:5px 7px;max-width:240px}
+#q{width:260px}
+.tabs{display:flex;gap:4px;margin-bottom:10px;align-items:center;flex-wrap:wrap}
+.tab{border:1px solid transparent;background:none;padding:6px 12px;border-radius:6px;cursor:pointer;color:var(--muted)}
+.tab.on{background:var(--panel);border-color:var(--line);color:var(--ink);font-weight:600}
+.count{color:var(--muted);font-size:12px;margin-left:8px}
+.wrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 290px)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel);z-index:2;cursor:pointer;user-select:none;font-weight:600;font-size:12px}
+th:hover{color:var(--accent)}
+th .ar{color:var(--accent);font-size:10px}
+tr:hover td{background:var(--hover)}
+td.num,th.num{text-align:right}
+td.wrapcell{white-space:normal;min-width:320px;color:var(--muted);font-size:12px}
+a.lnk{color:var(--accent);cursor:pointer;text-decoration:none}
+a.lnk:hover{text-decoration:underline}
+.pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;background:var(--chip)}
+.pill.Direct{color:var(--d)}.pill.Nested{color:var(--n)}.pill.False{color:var(--warn)}.pill.Guest{color:var(--warn)}
+table.mx th.g{writing-mode:vertical-rl;transform:rotate(180deg);height:190px;padding:6px 4px;font-weight:500;font-size:11px;vertical-align:bottom}
+table.mx td.c{text-align:center;padding:4px;width:22px}
+table.mx td.c.D::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--d)}
+table.mx td.c.N::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid var(--n)}
+table.mx td:first-child,table.mx th:first-child{position:sticky;left:0;background:var(--panel);z-index:1}
+table.mx th:first-child{z-index:3}
+.legend{color:var(--muted);font-size:12px;display:flex;gap:14px;align-items:center}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.note{color:var(--muted);font-size:12px;padding:8px 10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>AD Group Group Explorer</h1>
+  <span class="file" id="fname"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="reload" style="display:none">Load another CSV</button>
+  <button class="btn primary" id="export" style="display:none">Export current view</button>
+  <input type="file" id="fi" accept=".csv,text/csv" hidden>
+</header>
+<main>
+  <div id="drop"><b>Drop the CSV here</b> or <a class="lnk" id="pick">browse</a><br><br>Data stays in this browser tab — nothing is uploaded.</div>
+  <div id="app">
+    <div class="kpis" id="kpis"></div>
+    <div class="filters" id="filters"></div>
+    <div class="tabs">
+      <button class="tab on" data-v="rows">Memberships</button>
+      <button class="tab" data-v="users">Users</button>
+      <button class="tab" data-v="groups">Groups</button>
+      <button class="tab" data-v="matrix">Matrix</button>
+      <span class="count" id="count"></span>
+      <span class="spacer"></span>
+      <span class="legend" id="legend" style="display:none"><span><i style="background:var(--d)"></i>Direct</span><span><i style="border:2px solid var(--n)"></i>Nested</span></span>
+    </div>
+    <div class="wrap" id="out"></div>
+  </div>
+</main>
+<script>
+const DOMAINS=['FIN','HR','PLM','SN','TPM','COMMON'];
+const FILTERS=[['GroupName','Group'],['Family','Family'],['Role','Role'],['Domain','Domain'],['MembershipType','Membership'],['Department','Department'],['UserType','User type'],['AccountEnabled','Enabled']];
+const RENDER_CAP=5000;
+let ALL=[],view='rows',sort={key:null,dir:1},current={cols:[],data:[]};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function parseCSV(t){
+  if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
+  const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;else if(c===','){row.push(f);f=''}
+    else if(c==='\n'){row.push(f);rows.push(row);row=[];f=''}
+    else if(c!=='\r')f+=c}
+  if(f!==''||row.length){row.push(f);rows.push(row)}
+  const h=rows.shift()||[];
+  return rows.filter(r=>!(r.length===1&&r[0]==='')).map(r=>Object.fromEntries(h.map((k,i)=>[k,r[i]??''])));
+}
+function derive(g){
+  let family='Other',rest=g;
+  if(/^AAD\.RBAC\./.test(g)){family='AAD.RBAC';rest=g.replace(/^AAD\.RBAC\.ITDA_DLH_/,'')}
+  else if(/^DPF_/.test(g)){family='DPF';rest=g.replace(/^DPF_ITDA_DLH_/,'')}
+  const t=rest.split('_'),di=t.findIndex(x=>DOMAINS.includes(x));
+  return {Family:family,Domain:di>=0?t[di]:'(none)',Role:t.filter((_,i)=>i!==di).join('_')||'(none)',Short:rest};
+}
+function load(text,name){
+  ALL=parseCSV(text).map(r=>Object.assign(r,derive(r.GroupName||''),{Key:r.UserId||r.UserPrincipalName||r.DisplayName}));
+  if(!ALL.length||!('GroupName' in ALL[0])){alert('No rows or no GroupName column found.');return}
+  $('#fname').textContent=name+' · '+ALL.length.toLocaleString()+' rows';
+  $('#drop').style.display='none';$('#app').style.display='block';
+  $('#reload').style.display=$('#export').style.display='inline-block';
+  buildFilters();render();
+}
+function readFile(f){if(!f)return;const r=new FileReader();r.onload=()=>load(r.result,f.name);r.readAsText(f)}
+$('#pick').onclick=$('#reload').onclick=()=>$('#fi').click();
+$('#fi').onchange=e=>readFile(e.target.files[0]);
+['dragover','dragenter'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$('#drop').classList.add('over')}));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$('#drop').classList.remove('over')}));
+document.addEventListener('drop',e=>readFile(e.dataTransfer.files[0]));
+
+function buildFilters(){
+  let h='<div class="f"><label>Search (name, UPN, mail, title, dept)</label><input id="q" placeholder="type to filter…"></div>';
+  for(const [k,l] of FILTERS){
+    const counts={};ALL.forEach(r=>{const v=r[k]||'(blank)';counts[v]=(counts[v]||0)+1});
+    const vals=Object.keys(counts).sort((a,b)=>a.localeCompare(b));
+    h+=`<div class="f"><label>${l}</label><select data-k="${k}"><option value="">All (${vals.length})</option>${vals.map(v=>`<option value="${esc(v)}">${esc(v)} · ${counts[v]}</option>`).join('')}</select></div>`;
+  }
+  h+='<div class="f"><label>&nbsp;</label><button class="btn" id="clear">Clear</button></div>';
+  $('#filters').innerHTML=h;
+  $('#q').oninput=render;
+  document.querySelectorAll('#filters select').forEach(s=>s.onchange=render);
+  $('#clear').onclick=()=>{$('#q').value='';document.querySelectorAll('#filters select').forEach(s=>s.value='');render()};
+}
+function setFilter(k,v){const s=document.querySelector(`#filters select[data-k="${k}"]`);if(s){s.value=v}}
+function filtered(){
+  const q=$('#q').value.trim().toLowerCase();
+  const sel=[...document.querySelectorAll('#filters select')].filter(s=>s.value).map(s=>[s.dataset.k,s.value]);
+  return ALL.filter(r=>{
+    for(const [k,v] of sel){if((r[k]||'(blank)')!==v)return false}
+    if(q){const hay=[r.DisplayName,r.UserPrincipalName,r.Mail,r.JobTitle,r.Department,r.GroupName,r.EmployeeId].join(' ').toLowerCase();if(!hay.includes(q))return false}
+    return true});
+}
+const uniq=(a,f)=>new Set(a.map(f)).size;
+function kpis(rows){
+  const users={};rows.forEach(r=>users[r.Key]=r);const u=Object.values(users);
+  const k=[['Memberships',rows.length],['Unique users',u.length],['Groups',uniq(rows,r=>r.GroupName)],['Nested only',u.filter(x=>!rows.some(r=>r.Key===x.Key&&r.MembershipType==='Direct')).length],['Disabled',u.filter(x=>x.AccountEnabled==='False').length,1],['Guests',u.filter(x=>x.UserType==='Guest').length,1]];
+  $('#kpis').innerHTML=k.map(([l,v,w])=>`<div class="kpi${w&&v?' warn':''}"><div class="v">${v.toLocaleString()}</div><div class="l">${l}</div></div>`).join('');
+}
+function aggUsers(rows){
+  const m=new Map();
+  rows.forEach(r=>{let u=m.get(r.Key);if(!u){u={DisplayName:r.DisplayName,UserPrincipalName:r.UserPrincipalName,Mail:r.Mail,Department:r.Department,JobTitle:r.JobTitle,UserType:r.UserType,AccountEnabled:r.AccountEnabled,Groups:0,Direct:0,Nested:0,_g:new Set()};m.set(r.Key,u)}
+    if(!u._g.has(r.GroupName)){u._g.add(r.GroupName);u.Groups++;r.MembershipType==='Direct'?u.Direct++:u.Nested++}});
+  return [...m.values()].map(u=>(u.GroupList=[...u._g].sort().join('; '),delete u._g,u));
+}
+function aggGroups(rows){
+  const m=new Map();
+  rows.forEach(r=>{let g=m.get(r.GroupName);if(!g){g={GroupName:r.GroupName,Family:r.Family,Role:r.Role,Domain:r.Domain,Users:0,Direct:0,Nested:0,Disabled:0,Guests:0,_u:new Set()};m.set(r.GroupName,g)}
+    if(!g._u.has(r.Key)){g._u.add(r.Key);g.Users++;r.MembershipType==='Direct'?g.Direct++:g.Nested++;if(r.AccountEnabled==='False')g.Disabled++;if(r.UserType==='Guest')g.Guests++}});
+  return [...m.values()].map(g=>(delete g._u,g));
+}
+const VIEWS={
+  rows:{cols:[['GroupName','Group'],['MembershipType','Membership'],['DisplayName','Name'],['UserPrincipalName','UPN'],['Department','Department'],['JobTitle','Title'],['UserType','Type'],['AccountEnabled','Enabled'],['Role','Role'],['Domain','Domain']],data:r=>r},
+  users:{cols:[['DisplayName','Name'],['UserPrincipalName','UPN'],['Department','Department'],['JobTitle','Title'],['UserType','Type'],['AccountEnabled','Enabled'],['Groups','Groups',1],['Direct','Direct',1],['Nested','Nested',1],['GroupList','Group list']],data:aggUsers},
+  groups:{cols:[['GroupName','Group'],['Family','Family'],['Role','Role'],['Domain','Domain'],['Users','Users',1],['Direct','Direct',1],['Nested','Nested',1],['Disabled','Disabled',1],['Guests','Guests',1]],data:aggGroups}
+};
+function cell(k,v){
+  if(k==='MembershipType'||k==='AccountEnabled'||k==='UserType')return `<span class="pill ${esc(v)}">${esc(v)}</span>`;
+  if(k==='GroupName')return `<a class="lnk" data-g="${esc(v)}">${esc(v)}</a>`;
+  if(k==='UserPrincipalName')return `<a class="lnk" data-u="${esc(v)}">${esc(v)}</a>`;
+  return esc(v);
+}
+function render(){
+  const rows=filtered();kpis(rows);
+  $('#legend').style.display=view==='matrix'?'flex':'none';
+  if(view==='matrix')return renderMatrix(rows);
+  const V=VIEWS[view];let data=V.data(rows).slice();
+  if(sort.key){const num=V.cols.find(c=>c[0]===sort.key)?.[2];data.sort((a,b)=>num?(a[sort.key]-b[sort.key])*sort.dir:String(a[sort.key]??'').localeCompare(String(b[sort.key]??''))*sort.dir)}
+  current={cols:V.cols,data};
+  $('#count').textContent=data.length.toLocaleString()+' '+(view==='rows'?'memberships':view);
+  const shown=data.slice(0,RENDER_CAP);
+  let h='<table><thead><tr>'+V.cols.map(([k,l,n])=>`<th class="${n?'num':''}" data-k="${k}">${l} <span class="ar">${sort.key===k?(sort.dir>0?'▲':'▼'):''}</span></th>`).join('')+'</tr></thead><tbody>';
+  h+=shown.map(r=>'<tr>'+V.cols.map(([k,,n])=>`<td class="${n?'num':''}${k==='GroupList'?' wrapcell':''}">${cell(k,r[k])}</td>`).join('')+'</tr>').join('');
+  h+='</tbody></table>';
+  if(data.length>RENDER_CAP)h+=`<div class="note">Showing first ${RENDER_CAP.toLocaleString()} — narrow the filters or export for all.</div>`;
+  $('#out').innerHTML=h;
+  $('#out').querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;sort.dir=sort.key===k?-sort.dir:1;sort.key=k;render()});
+  $('#out').querySelectorAll('a[data-g]').forEach(a=>a.onclick=()=>{setFilter('GroupName',a.dataset.g);switchView('rows')});
+  $('#out').querySelectorAll('a[data-u]').forEach(a=>a.onclick=()=>{$('#q').value=a.dataset.u;switchView('rows')});
+}
+function renderMatrix(rows){
+  const groups=[...new Set(rows.map(r=>r.GroupName))].sort();
+  const m=new Map();
+  rows.forEach(r=>{let u=m.get(r.Key);if(!u){u={DisplayName:r.DisplayName,UserPrincipalName:r.UserPrincipalName,g:{}};m.set(r.Key,u)}if(u.g[r.GroupName]!=='D')u.g[r.GroupName]=r.MembershipType==='Direct'?'D':'N'});
+  const users=[...m.values()].sort((a,b)=>String(a.DisplayName).localeCompare(String(b.DisplayName)));
+  current={cols:[['DisplayName','Name'],['UserPrincipalName','UPN'],...groups.map(g=>[g,g])],data:users.map(u=>Object.assign({DisplayName:u.DisplayName,UserPrincipalName:u.UserPrincipalName},Object.fromEntries(groups.map(g=>[g,u.g[g]==='D'?'Direct':u.g[g]==='N'?'Nested':''])))) };
+  $('#count').textContent=`${users.length.toLocaleString()} users × ${groups.length} groups`;
+  const shown=users.slice(0,RENDER_CAP);
+  let h='<table class="mx"><thead><tr><th>User</th>'+groups.map(g=>`<th class="g" title="${esc(g)}">${esc(derive(g).Family==='AAD.RBAC'?'RBAC·'+derive(g).Short:derive(g).Family==='DPF'?'DPF·'+derive(g).Short:g)}</th>`).join('')+'</tr></thead><tbody>';
+  h+=shown.map(u=>`<tr><td title="${esc(u.UserPrincipalName)}">${esc(u.DisplayName)}</td>`+groups.map(g=>`<td class="c ${u.g[g]||''}" title="${esc(g)}${u.g[g]?' · '+(u.g[g]==='D'?'Direct':'Nested'):''}"></td>`).join('')+'</tr>').join('');
+  h+='</tbody></table>';
+  if(users.length>RENDER_CAP)h+=`<div class="note">Showing first ${RENDER_CAP.toLocaleString()} users — export for all.</div>`;
+  $('#out').innerHTML=h;
+}
+function switchView(v){view=v;sort={key:null,dir:1};document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===v));render()}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>switchView(t.dataset.v));
+$('#export').onclick=()=>{
+  const q=v=>{v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const csv='\uFEFF'+[current.cols.map(c=>q(c[1])).join(','),...current.data.map(r=>current.cols.map(c=>q(r[c[0]])).join(','))].join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`dlh_${view}_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+};
+</script>
+</body>
+</html>
