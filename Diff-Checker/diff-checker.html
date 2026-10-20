@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Diff Checker</title>
+<style>
+/* Offline: no external fonts or scripts. Layout: toolbar, two inputs, result pane. */
+:root{
+  --bg:#f4f6f8; --panel:#fff; --ink:#18212b; --muted:#5d6876; --line:#d7dce3; --soft:#eef1f4;
+  --accent:#0d6b75;
+  --del-bg:#fde8e7; --del-hi:#f6b5b0; --del-ink:#8f1d16;
+  --add-bg:#e3f4e7; --add-hi:#a8dcb4; --add-ink:#1d6131;
+  --f-ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#12171d; --panel:#1a2129; --ink:#e4e9ef; --muted:#9aa6b3; --line:#2e3843; --soft:#222a33;
+  --accent:#4fb3bd;
+  --del-bg:#3a1f1f; --del-hi:#7a2f2b; --del-ink:#ffb4ad;
+  --add-bg:#1b3324; --add-hi:#2f6b40; --add-ink:#a6e3b6;
+  color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-ui);padding:20px 16px 40px}
+.wrap{max-width:1600px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font-size:1.35rem;margin:0}
+.sub{color:var(--muted);margin:2px 0 0;font-size:.85rem}
+.bar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.bar label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap}
+.bar .grow{flex:1}
+button,select{font:inherit;padding:6px 12px;border-radius:4px;border:1px solid var(--line);background:var(--soft);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--panel);font-weight:600}
+button:focus-visible,select:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:800px){.inputs{grid-template-columns:1fr}}
+.side{display:flex;flex-direction:column;gap:6px;min-width:0}
+.side header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.side header b{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.side .meta{font-size:.78rem;color:var(--muted)}
+textarea{width:100%;min-height:220px;resize:vertical;font:12.5px/1.5 var(--f-mono);padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);white-space:pre;overflow:auto;tab-size:4}
+textarea.drag{border-color:var(--accent);border-style:dashed}
+.stats{display:flex;gap:14px;flex-wrap:wrap;font-size:.85rem}
+.stats .a{color:var(--add-ink);font-weight:600}
+.stats .d{color:var(--del-ink);font-weight:600}
+.result{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:auto;max-height:75vh}
+table{border-collapse:collapse;width:100%;font:12.5px/1.5 var(--f-mono);table-layout:fixed}
+td{padding:0 8px;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4}
+td.n{width:52px;text-align:right;color:var(--muted);user-select:none;border-right:1px solid var(--line);font-variant-numeric:tabular-nums}
+td.s{width:18px;text-align:center;user-select:none;color:var(--muted)}
+tr.del td.c, td.c.del{background:var(--del-bg)}
+tr.add td.c, td.c.add{background:var(--add-bg)}
+td.c.empty{background:var(--soft)}
+td.sep{border-left:1px solid var(--line)}
+del,ins{text-decoration:none;border-radius:2px}
+del{background:var(--del-hi)} ins{background:var(--add-hi)}
+tr.fold td{background:var(--soft);color:var(--muted);text-align:center;cursor:pointer;font-family:var(--f-ui);font-size:.8rem;padding:3px}
+tr.cur td.n{background:var(--accent);color:var(--panel)}
+.empty-state{padding:30px;text-align:center;color:var(--muted)}
+.same{padding:20px;text-align:center;color:var(--add-ink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Local Diff Checker</h1>
+    <p class="sub">Runs entirely in this browser tab. Nothing is uploaded or saved. Paste text, open files, or drop a file onto either box. Excel cells pasted in come through as tab-separated rows.</p>
+  </div>
+
+  <div class="inputs">
+    <div class="side">
+      <header><b>Original</b><span class="meta" id="metaA"></span><input type="file" id="fileA" aria-label="Open original file"></header>
+      <textarea id="a" spellcheck="false" aria-label="Original text"></textarea>
+    </div>
+    <div class="side">
+      <header><b>Changed</b><span class="meta" id="metaB"></span><input type="file" id="fileB" aria-label="Open changed file"></header>
+      <textarea id="b" spellcheck="false" aria-label="Changed text"></textarea>
+    </div>
+  </div>
+
+  <div class="bar">
+    <button class="primary" id="go" title="Ctrl+Enter">Compare</button>
+    <label><input type="radio" name="view" value="split" checked> Side by side</label>
+    <label><input type="radio" name="view" value="unified"> Unified</label>
+    <label><input type="checkbox" id="ws"> Ignore whitespace</label>
+    <label><input type="checkbox" id="ic"> Ignore case</label>
+    <label><input type="checkbox" id="fold" checked> Hide unchanged lines</label>
+    <label>Inline <select id="gran"><option value="word">words</option><option value="char">characters</option><option value="none">off</option></select></label>
+    <span class="grow"></span>
+    <button id="prev" title="Alt+Up">↑ Prev</button>
+    <button id="next" title="Alt+Down">↓ Next</button>
+    <button id="swap">Swap</button>
+    <button id="clear">Clear</button>
+  </div>
+
+  <div class="stats" id="stats" aria-live="polite"></div>
+  <div class="result" id="out"><div class="empty-state">Paste or open two texts, then press Compare.</div></div>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* Myers O(ND) diff. Returns [{t:'=',a,b}|{t:'-',a}|{t:'+',b}] using indexes. */
+function myers(A,B){
+  let s=0; while(s<A.length&&s<B.length&&A[s]===B[s]) s++;
+  let ea=A.length,eb=B.length; while(ea>s&&eb>s&&A[ea-1]===B[eb-1]){ea--;eb--;}
+  const a=A.slice(s,ea), b=B.slice(s,eb), n=a.length, m=b.length, max=n+m, off=max+1;
+  const ops=[];
+  for(let i=0;i<s;i++) ops.push({t:"=",a:i,b:i});
+  const mid=[];
+  if(n===0) for(let j=0;j<m;j++) mid.push({t:"+",b:s+j});
+  else if(m===0) for(let i=0;i<n;i++) mid.push({t:"-",a:s+i});
+  else{
+    const v=new Int32Array(2*max+3), trace=[];
+    let done=false;
+    for(let d=0;d<=max&&!done;d++){
+      trace.push(v.slice(off-d-1,off+d+2));
+      for(let k=-d;k<=d;k+=2){
+        let x=(k===-d||(k!==d&&v[off+k-1]<v[off+k+1]))?v[off+k+1]:v[off+k-1]+1, y=x-k;
+        while(x<n&&y<m&&a[x]===b[y]){x++;y++;}
+        v[off+k]=x;
+        if(x>=n&&y>=m){done=true;break;}
+      }
+    }
+    let x=n,y=m;
+    for(let d=trace.length-1;d>0;d--){
+      const t=trace[d], g=k=>t[k+d+1], k=x-y;
+      const pk=(k===-d||(k!==d&&g(k-1)<g(k+1)))?k+1:k-1, px=g(pk), py=px-pk;
+      while(x>px&&y>py){x--;y--;mid.push({t:"=",a:s+x,b:s+y});}
+      if(x===px){y--;mid.push({t:"+",b:s+y});} else {x--;mid.push({t:"-",a:s+x});}
+    }
+    while(x>0&&y>0){x--;y--;mid.push({t:"=",a:s+x,b:s+y});}
+    mid.reverse();
+  }
+  ops.push(...mid);
+  for(let i=0;i<A.length-ea;i++) ops.push({t:"=",a:ea+i,b:eb+i});
+  return ops;
+}
+
+/* Inline highlight for a changed line pair */
+function inline(l,r,gran,norm){
+  if(gran==="none") return [esc(l),esc(r)];
+  const tok=s=>gran==="char"?Array.from(s):(s.match(/\s+|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu)||[]);
+  const ta=tok(l), tb=tok(r);
+  if(ta.length*tb.length>4e6) return [esc(l),esc(r)];
+  const ka=ta.map(norm), kb=tb.map(norm);
+  // intern to ints so === works on normalized keys
+  const ops=myers(ka,kb);
+  let L="",R="";
+  for(const o of ops){
+    if(o.t==="=") {L+=esc(ta[o.a]);R+=esc(tb[o.b]);}
+    else if(o.t==="-") L+="<del>"+esc(ta[o.a])+"</del>";
+    else R+="<ins>"+esc(tb[o.b])+"</ins>";
+  }
+  return [L.replace(/<\/del><del>/g,""),R.replace(/<\/ins><ins>/g,"")];
+}
+
+function compare(){
+  const A=$("a").value.replace(/\r\n?/g,"\n").split("\n"), B=$("b").value.replace(/\r\n?/g,"\n").split("\n");
+  const ws=$("ws").checked, ic=$("ic").checked, gran=$("gran").value, view=document.querySelector("input[name=view]:checked").value, fold=$("fold").checked;
+  const norm=s=>{if(ws)s=s.replace(/\s+/g," ").trim(); if(ic)s=s.toLowerCase(); return s;};
+  const tnorm=s=>{if(ws&&/^\s+$/.test(s))return " "; return ic?s.toLowerCase():s;};
+  const ops=myers(A.map(norm),B.map(norm));
+
+  // group into rows: equal rows, and change blocks pairing deletes with inserts
+  const rows=[]; let i=0, adds=0, dels=0, mods=0;
+  while(i<ops.length){
+    if(ops[i].t==="="){rows.push({k:"eq",a:ops[i].a,b:ops[i].b});i++;continue;}
+    const D=[],I=[];
+    while(i<ops.length&&ops[i].t!=="="){(ops[i].t==="-"?D:I).push(ops[i]);i++;}
+    const blk=rows.length, n=Math.max(D.length,I.length);
+    for(let j=0;j<n;j++){
+      const d=D[j],p=I[j];
+      if(d&&p){mods++;rows.push({k:"mod",a:d.a,b:p.b,blk});}
+      else if(d){dels++;rows.push({k:"del",a:d.a,blk});}
+      else {adds++;rows.push({k:"add",b:p.b,blk});}
+    }
+  }
+  const changed=rows.filter(r=>r.k!=="eq").length;
+  $("stats").innerHTML=changed?`<span><span class="d">−${dels+mods}</span> / <span class="a">+${adds+mods}</span> lines</span><span>${mods} modified · ${dels} removed · ${adds} added</span><span class="muted">${A.length} → ${B.length} lines</span>`:"";
+  if(!changed){$("out").innerHTML=`<div class="same">No differences${ws||ic?" (with the selected ignore options)":""}.</div>`;blocks=[];return;}
+
+  // folding: keep 3 lines of context around changes
+  const CTX=3, keep=new Uint8Array(rows.length);
+  rows.forEach((r,ix)=>{if(r.k!=="eq")for(let j=Math.max(0,ix-CTX);j<=Math.min(rows.length-1,ix+CTX);j++)keep[j]=1;});
+  const html=[]; const colspan=view==="split"?6:4;
+  html.push(`<table>${view==="split"?'<colgroup><col style="width:52px"><col style="width:18px"><col><col style="width:52px"><col style="width:18px"><col></colgroup>':'<colgroup><col style="width:52px"><col style="width:52px"><col style="width:18px"><col></colgroup>'}<tbody>`);
+  let ix=0, foldId=0;
+  const lastBlk={v:-1};
+  while(ix<rows.length){
+    if(fold&&!keep[ix]){
+      let j=ix; while(j<rows.length&&!keep[j]) j++;
+      html.push(`<tr class="fold" data-f="${foldId}"><td colspan="${colspan}">⋯ ${j-ix} unchanged line${j-ix>1?"s":""} (click to show)</td></tr>`);
+      const hidden=[]; for(let q=ix;q<j;q++) hidden.push(rowHtml(rows[q],view,A,B,gran,tnorm,lastBlk));
+      foldStore[foldId++]=hidden.join("");
+      ix=j; continue;
+    }
+    html.push(rowHtml(rows[ix],view,A,B,gran,tnorm,lastBlk)); ix++;
+  }
+  html.push("</tbody></table>");
+  $("out").innerHTML=html.join("");
+  blocks=[...$("out").querySelectorAll("tr[data-blk]")]; cur=-1;
+}
+let foldStore={}, blocks=[], cur=-1;
+
+function rowHtml(r,view,A,B,gran,tnorm,lastBlk){
+  const first=r.k!=="eq"&&r.blk!==lastBlk.v; if(r.k!=="eq") lastBlk.v=r.blk;
+  const tag=first?` data-blk="${r.blk}"`:"";
+  const la=r.a!=null?A[r.a]:null, rb=r.b!=null?B[r.b]:null;
+  let L=la!=null?esc(la):"", R=rb!=null?esc(rb):"";
+  if(r.k==="mod"){[L,R]=inline(la,rb,gran,tnorm);}
+  const na=r.a!=null?r.a+1:"", nb=r.b!=null?r.b+1:"";
+  if(view==="split"){
+    const lc=r.k==="eq"?"":(la==null?"empty":"del"), rc=r.k==="eq"?"":(rb==null?"empty":"add");
+    return `<tr${tag}><td class="n">${na}</td><td class="s">${lc==="del"?"−":""}</td><td class="c ${lc}">${L}</td><td class="n sep">${nb}</td><td class="s">${rc==="add"?"+":""}</td><td class="c ${rc}">${R}</td></tr>`;
+  }
+  if(r.k==="eq") return `<tr${tag}><td class="n">${na}</td><td class="n">${nb}</td><td class="s"></td><td class="c">${L}</td></tr>`;
+  let h="";
+  if(la!=null) h+=`<tr class="del"${tag}><td class="n">${na}</td><td class="n"></td><td class="s">−</td><td class="c">${L}</td></tr>`;
+  if(rb!=null) h+=`<tr class="add"${la==null?tag:""}><td class="n"></td><td class="n">${nb}</td><td class="s">+</td><td class="c">${R}</td></tr>`;
+  return h;
+}
+
+function jump(dir){
+  if(!blocks.length) return;
+  blocks[cur]?.classList.remove("cur");
+  cur=(cur+dir+blocks.length)%blocks.length;
+  blocks[cur].classList.add("cur");
+  blocks[cur].scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+}
+
+/* wiring */
+$("go").onclick=compare;
+["ws","ic","fold","gran"].forEach(id=>$(id).addEventListener("change",()=>{if(blocks.length||$("out").querySelector("table,.same"))compare();}));
+document.querySelectorAll("input[name=view]").forEach(r=>r.addEventListener("change",()=>{if($("out").querySelector("table"))compare();}));
+$("out").addEventListener("click",e=>{const f=e.target.closest("tr.fold");if(!f)return;const t=document.createElement("tbody");t.innerHTML=foldStore[f.dataset.f];f.replaceWith(...t.children);blocks=[...$("out").querySelectorAll("tr[data-blk]")];});
+$("prev").onclick=()=>jump(-1); $("next").onclick=()=>jump(1);
+$("swap").onclick=()=>{const t=$("a").value;$("a").value=$("b").value;$("b").value=t;const m=$("metaA").textContent;$("metaA").textContent=$("metaB").textContent;$("metaB").textContent=m;meta();compare();};
+$("clear").onclick=()=>{$("a").value=$("b").value="";$("metaA").textContent=$("metaB").textContent="";$("stats").innerHTML="";$("out").innerHTML='<div class="empty-state">Paste or open two texts, then press Compare.</div>';blocks=[];};
+document.addEventListener("keydown",e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();compare();}
+  if(e.altKey&&e.key==="ArrowDown"){e.preventDefault();jump(1);}
+  if(e.altKey&&e.key==="ArrowUp"){e.preventDefault();jump(-1);}
+});
+function meta(){["a","b"].forEach(s=>{const v=$(s).value;const m=$("meta"+s.toUpperCase());const base=m.dataset.name?m.dataset.name+" · ":"";m.textContent=v?base+v.split(/\r\n?|\n/).length+" lines":"";});}
+function load(file,side){
+  const m=$("meta"+side.toUpperCase());
+  if(/\.(xlsx|xls|docx|pdf|zip)$/i.test(file.name)){m.dataset.name="";m.textContent=file.name+" is binary. Export it to .csv/.txt first, or paste the cells.";return;}
+  const r=new FileReader(); r.onload=()=>{$(side).value=r.result;m.dataset.name=file.name;meta();}; r.readAsText(file);
+}
+$("fileA").onchange=e=>e.target.files[0]&&load(e.target.files[0],"a");
+$("fileB").onchange=e=>e.target.files[0]&&load(e.target.files[0],"b");
+["a","b"].forEach(s=>{
+  const t=$(s);
+  t.addEventListener("input",()=>{$("meta"+s.toUpperCase()).dataset.name="";meta();});
+  t.addEventListener("dragover",e=>{e.preventDefault();t.classList.add("drag");});
+  t.addEventListener("dragleave",()=>t.classList.remove("drag"));
+  t.addEventListener("drop",e=>{e.preventDefault();t.classList.remove("drag");const f=e.dataTransfer.files[0];if(f)load(f,s);});
+});
+</script>
+</body>
+</html>
